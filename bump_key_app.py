@@ -1,6 +1,9 @@
+import time
+
 import requests
-import hibp_keys
 from bs4 import BeautifulSoup
+
+import hibp_keys
 
 
 class BumpKeyApp:
@@ -29,23 +32,54 @@ class BumpKeyApp:
                 print(f'Found breach: {breach_name}\nDomain: {breach_domain}\nDate: {breach_date}\n')
                 parsed_data.append([breach_name, breach_domain, breach_date, logo_path])
         elif response.status_code == 401:
-            print('The API key  is not authorised to query HIBP API. Please check the provided API Key')
+            raise PermissionError('The API key is not authorised to query HIBP API. Please check the provided API Key')
         else:
             data = response.json()
-            print(f'Error: {response.status_code}  {data.get("message", "")}')
+            raise Exception(f'Error: {response.status_code}  {data.get("message", "")}')
         return parsed_data
 
-    def query_dehashed_for_email(self, email_address):
-        formatted_email_address = email_address.replace('@', '%40')
-        response = requests.get(f'https://www.dehashed.com/search?query={formatted_email_address}')
+    def request_page_and_filter(self, sub_page):
+        # Dehashed uses Cloudflare anti bot protection which can prevent results being scraped
+        # In order to access results we will use a third party API instead of requests that solves the cloudflare
+        # Javascript challenge https://github.com/Anorov/cloudflare-scrape
+        print(f'Querying : {sub_page}')
+        response = requests.get(f'https://www.dehashed.com/{sub_page}')
+        print(f'Response code:{response.status_code}')
+        print(f'Response text:{response.text}')
         if response.status_code == 200:
+            print(f'Loading soup')
             soup = BeautifulSoup(response.text, 'html.parser')
             removal_data = soup.find_all(class_="request-removal")
             removal_links = [f'https://www.dehashed.com{link.get("href")}' for link in removal_data]
-            #This gives us the first page of results only.
-            #Further results are available at https://dehashed.com/search?query=basimjafar%40gmail.com&page=2
-            #TODO need to figure out how to find the 'end page for an email address set of results.
+            if removal_links:
+                print(f'Found links: {removal_links}')
+            # This gives us the first page of results only.
+            # Check for further pages.
+            page_selector = soup.find(class_="next pull-right")
+            if page_selector:
+                # If further pages exist this will give us the link so we can scrape it.
+                next_set_of_results = page_selector.find("a").get('href', None)
+                print(f'Found additional page of results: {next_set_of_results}')
+                print(f'Sleep before requesting to avoid triggering ddos protection: {next_set_of_results}')
+                time.sleep(10)
+                self.request_page_and_filter(next_set_of_results)
+            return removal_links
 
+    def query_dehashed_for_email(self, email_address):
+        formatted_email_address = email_address.replace('@', '%40')
+        emails = self.request_page_and_filter(f'search?query={formatted_email_address}')
+    #   response = requests.get(f'https://www.dehashed.com/search?query={formatted_email_address}')
+        # if response.status_code == 200:
+        #     soup = BeautifulSoup(response.text, 'html.parser')
+        #     removal_data = soup.find_all(class_="request-removal")
+        #     removal_links = [f'https://www.dehashed.com{link.get("href")}' for link in removal_data]
+        #     #This gives us the first page of results only.
+        #     #Check for further pages.
+        #     page_selector = soup.find(class_="next pull-right")
+        #     if page_selector:
+        #         #If further pages exist this will give us the link so we can scrape it.
+        #         next_set_of_results = page_selector.find("a").get('href', None)
+        #         self.query_dehashed_for_email()
 
 
     def compile_data_for_email(self, email_address):

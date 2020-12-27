@@ -1,7 +1,9 @@
 from unittest import TestCase
-from unittest.mock import patch, Mock, MagicMock, PropertyMock
-import bump_key_app
+from unittest.mock import patch, Mock
+
 import requests
+
+import bump_key_app
 
 
 class TestBumpKeyApp(TestCase):
@@ -42,26 +44,7 @@ class TestBumpKeyApp(TestCase):
         with self.assertRaises(requests.Timeout):
             test_target.request_pwnage_data_for_email(dummy_email)
 
-
-    def process_pwnage_data_for_email(self, response):
-        parsed_data = []
-        if response.status_code == 200:
-            data = response.json()
-            for record in data:
-                breach_name = record['Name']
-                breach_domain = record['Domain']
-                breach_date = record['BreachDate']
-                logo_path = record['LogoPath']
-                print(f'Found breach: {breach_name}\nDomain: {breach_domain}\nDate: {breach_date}\n')
-                parsed_data.append([breach_name, breach_domain, breach_date, logo_path])
-        elif response.status_code == 401:
-            print('The API key  is not authorised to query HIBP API. Please check the provided API Key')
-        else:
-            data = response.json()
-            print(f'Error: {response.status_code}  {data.get("message", "")}')
-        return parsed_data
-
-    def test_process_pwnage_data_for_email(self):
+    def test_process_pwnage_data_for_email_positive_case(self):
         response = Mock()
         response.status_code = 200
         response.json.return_value = [{'Name': 'Breach1', 'Domain': 'D1', 'BreachDate': '1', 'LogoPath': '/x/y/z',
@@ -78,6 +61,29 @@ class TestBumpKeyApp(TestCase):
         self.assertEqual(test_result, [['Breach1', 'D1', '1', '/x/y/z'],
                                         ['Breach2', 'D2', '2', '/x/y/x'],
                                         ['Breach3', 'D3', '3', '/x/y/y']])
+
+    def test_process_pwnage_data_for_email_negative_case_auth(self):
+        response = Mock()
+        response.status_code = 401
+        response.json.return_value = [{'Name': 'Breach1', 'Domain': 'D1', 'BreachDate': '1', 'LogoPath': '/x/y/z',
+                                       'Other': '1'},
+                                      {'Name': 'Breach2', 'Domain': 'D2', 'BreachDate': '2', 'LogoPath': '/x/y/x',
+                                       'Other': '2'},
+                                      {'Name': 'Breach3', 'Domain': 'D3', 'BreachDate': '3', 'LogoPath': '/x/y/y',
+                                       'Other': '3'}
+                                      ]
+        test_target = test_target = bump_key_app.BumpKeyApp()
+        with self.assertRaises(PermissionError):
+            test_target.process_pwnage_data_for_email(response)
+
+    def test_process_pwnage_data_for_email_negative_case_other(self):
+        response = Mock()
+        response.status_code = 666
+        response.json.return_value = 'ERROR'
+        test_target = test_target = bump_key_app.BumpKeyApp()
+        with self.assertRaises(Exception):
+            test_target.process_pwnage_data_for_email(response)
+
 
     def test_query_dehashed_for_email(self):
         self.fail('Not implemented')
