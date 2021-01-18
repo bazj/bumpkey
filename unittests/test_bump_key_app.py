@@ -1,5 +1,5 @@
 from unittest import TestCase
-from unittest.mock import patch, Mock
+from unittest.mock import patch, Mock, call
 
 import requests
 
@@ -69,7 +69,7 @@ class TestBumpKeyApp(TestCase):
         response = Mock()
         response.status_code = 401
         response.json.return_value = self.mocked_return_data
-        test_target = test_target = bump_key_app.BumpKeyApp()
+        test_target = bump_key_app.BumpKeyApp()
         with self.assertRaises(PermissionError):
             test_target.process_pwnage_data_for_email(response)
 
@@ -116,4 +116,11 @@ class TestBumpKeyApp(TestCase):
         self.fail('Not implemented')
 
     def test_request_removal_of_details(self):
-        self.fail('Not implemented')
+        mocked_scraper = Mock()
+        test_removal_links = ['test1', 'test2', 'test3']
+        test_target = bump_key_app.BumpKeyApp()
+        test_target.scraper = mocked_scraper
+        test_target.request_removal_of_details(test_removal_links)
+        expected_call_list = [call.get(x) for x in test_removal_links]
+        mocked_scraper.assert_has_calls(expected_call_list, any_order=True)
+        self.assertEqual(mocked_scraper.get.call_count, len(test_removal_links))
